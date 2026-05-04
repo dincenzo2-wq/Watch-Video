@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+downloads/
+ffmpeg.exe
+playwright_profile/
+test_video.mp4
+bin/
+scratch/
+*.mp4
+*.log
