@@ -187,18 +187,29 @@ def run_workflow():
 
 def main():
     print("🚀 BOT AUTO CONTENT (BẢN KHÔNG ẢNH): KHỞI CHẠY")
-    while True:
-        status = run_workflow()
-        
-        if status == "EMPTY":
-            print("\n🏁 HOÀN TẤT: Không còn video nào chờ xử lý.")
-            break
-        
-        if status is True:
-            print("⏳ Nghỉ 2 phút bảo vệ API...")
-            time.sleep(120)
-        else:
-            continue
+    try:
+        while True:
+            status = run_workflow()
+            
+            if status == "EMPTY":
+                print("\n🏁 HOÀN TẤT: Không còn video nào chờ xử lý. Nghỉ 5 phút trước khi kiểm tra lại...")
+                time.sleep(300) # Nghỉ 5 phút thay vì thoát hẳn để run.bat tiếp tục
+                continue
+            
+            if status is True:
+                print("⏳ Nghỉ 2 phút bảo vệ API...")
+                time.sleep(120)
+            else:
+                print("⚠️ Lỗi nhẹ, thử lại sau 30 giây...")
+                time.sleep(30)
+                continue
+    except KeyboardInterrupt:
+        print("\n🛑 Đã dừng Bot theo yêu cầu.")
+        sys.exit(0)
+    except Exception as e:
+        print(f"🔥 LỖI HỆ THỐNG NGHIÊM TRỌNG: {e}")
+        time.sleep(10)
+        sys.exit(1) # Thoát với mã lỗi để run.bat biết và restart
 
 if __name__ == "__main__":
     main()
