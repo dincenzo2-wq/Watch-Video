@@ -35,4 +35,4 @@ jobs:
           WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
           WEB_API_KEY: ${{ secrets.WEB_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python main.py
+        run: python -u main.py

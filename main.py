@@ -195,8 +195,12 @@ def main():
             status = run_workflow()
             
             if status == "EMPTY":
-                print("\n🏁 HOÀN TẤT: Không còn video nào chờ xử lý. Nghỉ 5 phút trước khi kiểm tra lại...")
-                time.sleep(300) # Nghỉ 5 phút thay vì thoát hẳn để run.bat tiếp tục
+                print("\n🏁 HOÀN TẤT: Không còn video nào chờ xử lý.")
+                if os.getenv("GITHUB_ACTIONS") == "true":
+                    print("🚀 Đang chạy trên GitHub Actions: Tự động thoát để hoàn tất Workflow.")
+                    break
+                print("⏳ Nghỉ 5 phút trước khi kiểm tra lại...")
+                time.sleep(300) 
                 continue
             
             if status is True:
