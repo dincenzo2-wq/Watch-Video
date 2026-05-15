@@ -3,7 +3,7 @@ import time
 import json
 import requests
 import yt_dlp
-from google import genai
+import google.generativeai as genai
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
@@ -21,7 +21,7 @@ WEB_API_KEY = os.getenv("WEB_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MODEL_NAME = "gemini-3.1-flash-lite-preview" # Model mới nhất cho phân tích video
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+genai.configure(api_key=GEMINI_API_KEY)
 
 # Bộ nhớ tạm để bỏ qua các ID lỗi
 BLACKLIST = set() 
@@ -41,15 +41,22 @@ DISTRICTS = ['Quận 1', 'Quận 2', 'Quận 3', 'Quận 4', 'Quận 5', 'Quận
 # ===== HÀM XỬ LÝ =====
 
 def fetch_one_item():
-    """Lấy 1 video chưa xử lý từ Web"""
-    url = f"{WEB_BASE_URL}/api/places?status=draft"
+    # Sử dụng status=all để lấy cả bản nháp (draft)
+    url = f"{WEB_BASE_URL}/api/places?status=all&limit=100"
     try:
         res = requests.get(url, headers=HEADERS, timeout=30)
         if res.status_code == 200:
             data = res.json()
-            if data and isinstance(data, list):
-                for item in data:
-                    if item["id"] not in BLACKLIST: return item
+            if not data or not isinstance(data, list):
+                return None
+            
+            # Lọc các bản nháp chưa được xử lý
+            draft_items = [i for i in data if str(i.get("status")).lower() == "draft" and i["id"] not in BLACKLIST]
+            
+            print(f"📊 Tổng số địa điểm: {len(data)} | Bản nháp chờ xử lý: {len(draft_items)}")
+            
+            if draft_items:
+                return draft_items[0]
         else:
             print(f"⚠️ Fetch Error: Status {res.status_code}")
     except Exception as e:
@@ -59,11 +66,12 @@ def fetch_one_item():
 def analyze_video_with_gemini(video_path: Path):
     """Gửi video cho AI phân tích"""
     try:
-        video_file = client.files.upload(path=str(video_path))
-        while video_file.state == "PROCESSING":
+        video_file = genai.upload_file(path=str(video_path))
+        while video_file.state.name == "PROCESSING":
             time.sleep(5)
-            video_file = client.files.get(name=video_file.name)
+            video_file = genai.get_file(video_file.name)
         
+        model = genai.GenerativeModel(model_name=MODEL_NAME)
         prompt = f"""
         Phân tích video TikTok này và trả về JSON thông tin địa điểm.
         QUY TẮC: 
@@ -87,14 +95,10 @@ def analyze_video_with_gemini(video_path: Path):
             "province": "Hồ Chí Minh"
         }}
         """
-        response = client.models.generate_content(
-            model=MODEL_NAME,
-            contents=[video_file, prompt],
-            config={
-                "response_mime_type": "application/json"
-            }
-        )
-        client.files.delete(name=video_file.name)
+        response = model.generate_content([video_file, prompt], generation_config={
+            "response_mime_type": "application/json"
+        })
+        genai.delete_file(video_file.name)
         return response.text
     except Exception as e:
         raise Exception(f"AI Error: {e}")
@@ -138,12 +142,13 @@ def update_to_web(video_id, analysis_result):
             "processed": 1         
         }
 
-        res = requests.put(url, json=payload, headers=HEADERS, timeout=30)
+        # Sử dụng PATCH theo tài liệu của bạn
+        res = requests.patch(url, json=payload, headers=HEADERS, timeout=30)
         if res.ok:
-            print(f"📡 Web phản hồi (PUT {url}): {res.status_code}")
+            print(f"📡 Web phản hồi (PATCH {url}): {res.status_code}")
             return True
         else:
-            print(f"⚠️ PUT {url} thất bại: {res.status_code} - {res.text}")
+            print(f"⚠️ PATCH {url} thất bại: {res.status_code} - {res.text}")
         
         return False
     except Exception as e:
@@ -167,7 +172,7 @@ def run_workflow():
     video_path = DOWNLOAD_DIR / f"{video_id}.mp4"
 
     try:
-        print(f"🎬 ID: {video_id} | Đang tải...")
+        print(f"🎬 ID: {video_id} | Đang tải video từ: {tiktok_url}")
         with yt_dlp.YoutubeDL({"outtmpl": str(video_path), "quiet": True}) as ydl:
             ydl.download([tiktok_url])
         
@@ -195,12 +200,8 @@ def main():
             status = run_workflow()
             
             if status == "EMPTY":
-                print("\n🏁 HOÀN TẤT: Không còn video nào chờ xử lý.")
-                if os.getenv("GITHUB_ACTIONS") == "true":
-                    print("🚀 Đang chạy trên GitHub Actions: Tự động thoát để hoàn tất Workflow.")
-                    break
-                print("⏳ Nghỉ 5 phút trước khi kiểm tra lại...")
-                time.sleep(300) 
+                print("\n🏁 HOÀN TẤT: Không còn video nào chờ xử lý. Nghỉ 5 phút trước khi kiểm tra lại...")
+                time.sleep(300) # Nghỉ 5 phút thay vì thoát hẳn để run.bat tiếp tục
                 continue
             
             if status is True:

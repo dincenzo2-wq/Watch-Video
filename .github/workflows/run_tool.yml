@@ -10,6 +10,8 @@ on:
 jobs:
   run-tool:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout code
@@ -18,7 +20,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
 
       - name: Install system dependencies
         run: |
@@ -35,4 +37,4 @@ jobs:
           WEB_BASE_URL: ${{ secrets.WEB_BASE_URL }}
           WEB_API_KEY: ${{ secrets.WEB_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python -u main.py
+        run: python main.py
