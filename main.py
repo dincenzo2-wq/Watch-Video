@@ -3,7 +3,7 @@ import time
 import json
 import requests
 import yt_dlp
-import google.generativeai as genai
+from google import genai
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
@@ -21,7 +21,7 @@ WEB_API_KEY = os.getenv("WEB_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MODEL_NAME = "gemini-3.1-flash-lite-preview" # Model mới nhất cho phân tích video
 
-genai.configure(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 # Bộ nhớ tạm để bỏ qua các ID lỗi
 BLACKLIST = set() 
@@ -66,12 +66,11 @@ def fetch_one_item():
 def analyze_video_with_gemini(video_path: Path):
     """Gửi video cho AI phân tích"""
     try:
-        video_file = genai.upload_file(path=str(video_path))
-        while video_file.state.name == "PROCESSING":
+        video_file = client.files.upload(file=str(video_path))
+        while video_file.state == "PROCESSING":
             time.sleep(5)
-            video_file = genai.get_file(video_file.name)
+            video_file = client.files.get(name=video_file.name)
         
-        model = genai.GenerativeModel(model_name=MODEL_NAME)
         prompt = f"""
         Phân tích video TikTok này và trả về JSON thông tin địa điểm.
         QUY TẮC: 
@@ -95,10 +94,14 @@ def analyze_video_with_gemini(video_path: Path):
             "province": "Hồ Chí Minh"
         }}
         """
-        response = model.generate_content([video_file, prompt], generation_config={
-            "response_mime_type": "application/json"
-        })
-        genai.delete_file(video_file.name)
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=[video_file, prompt],
+            config={
+                "response_mime_type": "application/json"
+            }
+        )
+        client.files.delete(name=video_file.name)
         return response.text
     except Exception as e:
         raise Exception(f"AI Error: {e}")
@@ -200,7 +203,11 @@ def main():
             status = run_workflow()
             
             if status == "EMPTY":
-                print("\n🏁 HOÀN TẤT: Không còn video nào chờ xử lý. Nghỉ 5 phút trước khi kiểm tra lại...")
+                print("\n🏁 HOÀN TẤT: Không còn video nào chờ xử lý.")
+                if os.getenv("GITHUB_ACTIONS") == "true":
+                    print("🚀 Đang chạy trên GitHub Actions: Tự động thoát để hoàn tất Workflow.")
+                    break
+                print("⏳ Nghỉ 5 phút trước khi kiểm tra lại...")
                 time.sleep(300) # Nghỉ 5 phút thay vì thoát hẳn để run.bat tiếp tục
                 continue
             
