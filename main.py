@@ -176,7 +176,15 @@ def run_workflow():
 
     try:
         print(f"🎬 ID: {video_id} | Đang tải video từ: {tiktok_url}")
-        with yt_dlp.YoutubeDL({"outtmpl": str(video_path), "quiet": True}) as ydl:
+        ydl_opts = {
+            "outtmpl": str(video_path),
+            "quiet": True,
+            "no_warnings": True,
+            "impersonate": "chrome",
+            "extractor_retries": 3,
+            "socket_timeout": 30,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([tiktok_url])
         
         print(f"🧠 Gemini đang phân tích nội dung...")
