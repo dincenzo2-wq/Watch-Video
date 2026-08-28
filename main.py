@@ -158,6 +158,43 @@ def update_to_web(video_id, analysis_result):
         print(f"❌ Update Error: {e}")
         return False
 
+def download_video_file(url: str, output_path: Path) -> bool:
+    """Tải video từ TikTok, Facebook, YouTube với cơ chế fallback thông minh"""
+    # 1. Nếu là link TikTok (bao gồm cả vt.tiktok.com)
+    if "tiktok.com" in url.lower():
+        try:
+            print(f"⚡ Đang giải mã link TikTok qua TikWM API...")
+            res = requests.post("https://www.tikwm.com/api/", data={"url": url, "hd": 1}, timeout=20)
+            if res.ok:
+                data = res.json()
+                if data.get("code") == 0 and data.get("data", {}).get("play"):
+                    play_url = data["data"]["play"]
+                    v_res = requests.get(play_url, stream=True, timeout=60)
+                    if v_res.ok:
+                        with open(output_path, "wb") as f:
+                            for chunk in v_res.iter_content(chunk_size=1024*1024):
+                                if chunk:
+                                    f.write(chunk)
+                        if output_path.exists() and output_path.stat().st_size > 1000:
+                            print(f"✅ Tải thành công video TikTok ({output_path.stat().st_size / (1024*1024):.2f} MB)")
+                            return True
+        except Exception as e:
+            print(f"⚠️ TikWM API thất bại ({e}), chuyển sang yt-dlp...")
+
+    # 2. Fallback dùng yt-dlp (hỗ trợ Facebook, YouTube, v.v.)
+    ydl_opts = {
+        "outtmpl": str(output_path),
+        "quiet": True,
+        "no_warnings": True,
+        "impersonate": "chrome",
+        "extractor_retries": 3,
+        "socket_timeout": 30,
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
+    
+    return output_path.exists() and output_path.stat().st_size > 1000
+
 # ===== LUỒNG VẬN HÀNH CHÍNH =====
 
 def run_workflow():
@@ -176,16 +213,8 @@ def run_workflow():
 
     try:
         print(f"🎬 ID: {video_id} | Đang tải video từ: {tiktok_url}")
-        ydl_opts = {
-            "outtmpl": str(video_path),
-            "quiet": True,
-            "no_warnings": True,
-            "impersonate": "chrome",
-            "extractor_retries": 3,
-            "socket_timeout": 30,
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([tiktok_url])
+        if not download_video_file(tiktok_url, video_path):
+            raise Exception("Không thể tải file video từ URL này.")
         
         print(f"🧠 Gemini đang phân tích nội dung...")
         result = analyze_video_with_gemini(video_path)
