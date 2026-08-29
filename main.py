@@ -158,40 +158,67 @@ def update_to_web(video_id, analysis_result):
         print(f"❌ Update Error: {e}")
         return False
 
+def is_valid_video_url(url: str) -> bool:
+    """Kiểm tra link có phải là định dạng video hợp lệ không"""
+    u = url.lower().strip()
+    if "tiktok.com" in u:
+        return True
+    if "youtube.com" in u or "youtu.be" in u:
+        return True
+    if "facebook.com" in u or "fb.watch" in u:
+        # Link video Facebook hợp lệ thường chứa reel, watch, videos, fb.watch
+        if any(k in u for k in ["/reel", "/watch", "/videos", "fb.watch", "video.php"]):
+            return True
+        return False
+    if "instagram.com" in u and ("/reel" in u or "/p/" in u):
+        return True
+    return True
+
 def download_video_file(url: str, output_path: Path) -> bool:
     """Tải video từ TikTok, Facebook, YouTube với cơ chế fallback thông minh"""
-    # 1. Nếu là link TikTok (bao gồm cả vt.tiktok.com)
+    if not is_valid_video_url(url):
+        print(f"⚠️ Link không phải định dạng video hợp lệ (ví dụ Fanpage/Profile Facebook cá nhân): {url}")
+        return False
+
+    # 1. Nếu là link TikTok (bao gồm cả vt.tiktok.com) -> Dùng TikWM qua curl_cffi
     if "tiktok.com" in url.lower():
         try:
-            print(f"⚡ Đang giải mã link TikTok qua TikWM API...")
-            res = requests.post("https://www.tikwm.com/api/", data={"url": url, "hd": 1}, timeout=20)
+            print(f"⚡ Đang giải mã link TikTok qua TikWM API (curl_cffi)...")
+            from curl_cffi import requests as c_requests
+            res = c_requests.post(
+                "https://www.tikwm.com/api/",
+                data={"url": url, "hd": 1},
+                impersonate="chrome120",
+                timeout=20
+            )
             if res.ok:
                 data = res.json()
                 if data.get("code") == 0 and data.get("data", {}).get("play"):
                     play_url = data["data"]["play"]
-                    v_res = requests.get(play_url, stream=True, timeout=60)
-                    if v_res.ok:
+                    v_res = c_requests.get(play_url, impersonate="chrome120", timeout=60)
+                    if v_res.ok and len(v_res.content) > 1000:
                         with open(output_path, "wb") as f:
-                            for chunk in v_res.iter_content(chunk_size=1024*1024):
-                                if chunk:
-                                    f.write(chunk)
+                            f.write(v_res.content)
                         if output_path.exists() and output_path.stat().st_size > 1000:
                             print(f"✅ Tải thành công video TikTok ({output_path.stat().st_size / (1024*1024):.2f} MB)")
                             return True
         except Exception as e:
             print(f"⚠️ TikWM API thất bại ({e}), chuyển sang yt-dlp...")
 
-    # 2. Fallback dùng yt-dlp (hỗ trợ Facebook, YouTube, v.v.)
-    ydl_opts = {
-        "outtmpl": str(output_path),
-        "quiet": True,
-        "no_warnings": True,
-        "impersonate": "chrome",
-        "extractor_retries": 3,
-        "socket_timeout": 30,
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
+    # 2. Fallback dùng yt-dlp (hỗ trợ Facebook Video, YouTube, v.v.)
+    try:
+        ydl_opts = {
+            "outtmpl": str(output_path),
+            "quiet": True,
+            "no_warnings": True,
+            "impersonate": "chrome",
+            "extractor_retries": 3,
+            "socket_timeout": 30,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+    except Exception as e:
+        print(f"⚠️ yt-dlp download failed: {e}")
     
     return output_path.exists() and output_path.stat().st_size > 1000
 
