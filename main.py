@@ -19,7 +19,7 @@ load_dotenv()
 WEB_BASE_URL = os.getenv("WEB_BASE_URL")
 WEB_API_KEY = os.getenv("WEB_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-MODEL_NAME = "gemini-3.1-flash-lite-preview" # Model mới nhất cho phân tích video
+MODEL_NAME = "gemini-3.5-flash-lite" # Model Gemini 3.5 Flash-Lite tối ưu cho phân tích video
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
